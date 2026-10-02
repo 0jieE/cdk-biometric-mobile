@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "637548898549",
+    "project_id": "biometric-attendance-25729",
+    "storage_bucket": "biometric-attendance-25729.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:637548898549:android:b6ca18a5d37357f38b7dbc",
+        "android_client_info": {
+          "package_name": "ph.edu.ckc.biometric_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDS9NkP54KmWdEjvW2AxPITGDVJ5_r1CS4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
