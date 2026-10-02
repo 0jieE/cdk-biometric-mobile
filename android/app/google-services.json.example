@@ -1,0 +1,30 @@
+{
+  "_comment": "Template only. Copy to google-services.json (gitignored) and fill in real values from Firebase Console -> Project settings -> General -> Your apps -> Android app -> google-services.json, or regenerate with `flutterfire configure` (see README). Required for the Android build when Firebase/push is wanted; the app runs without it, with push disabled.",
+  "project_info": {
+    "project_number": "",
+    "project_id": "",
+    "storage_bucket": ""
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "",
+        "android_client_info": {
+          "package_name": "ph.edu.ckc.biometric_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": ""
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
