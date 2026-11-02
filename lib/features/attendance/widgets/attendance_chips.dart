@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/attendance_day.dart';
+import '../../../models/weekly_hours.dart';
 
 /// Attendance status palette (shared with the summary tiles). These are the
 /// Phase 11 semantic colors and are intentionally NOT re-themed by the accent.
@@ -13,6 +14,7 @@ class StatusColors {
   static const absent = AppTheme.absent; // red
   static const overtime = AppTheme.overtime; // blue
   static const missing = AppTheme.absent; // red
+  static const pending = AppTheme.pending; // sky — today, not yet judged
   static const unknown = Colors.grey;
 }
 
@@ -46,12 +48,19 @@ Widget _pill({
       children: [
         Icon(icon, size: 14, color: filled ? Colors.white : color),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            color: filled ? Colors.white : color,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
+        // Flexible (not a fixed-size child): most labels are short enough to
+        // take their natural width, but a long one (e.g. "Incomplete —
+        // missing OUT") shrinks/ellipsizes instead of overflowing the pill on
+        // a narrow phone.
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: filled ? Colors.white : color,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
           ),
         ),
       ],
@@ -79,6 +88,16 @@ class DayStatusBadge extends StatelessWidget {
         Icons.hourglass_bottom,
       ),
       DayStatus.absent => (StatusColors.absent, 'Absent', Icons.cancel),
+      DayStatus.pending => (
+        StatusColors.pending,
+        'In progress',
+        Icons.hourglass_empty,
+      ),
+      DayStatus.incomplete => (
+        StatusColors.late,
+        'Incomplete',
+        Icons.report_problem_outlined,
+      ),
       DayStatus.unknown => (
         StatusColors.unknown,
         'Unknown',
@@ -119,6 +138,11 @@ class SessionChip extends StatelessWidget {
         'Missing',
         Icons.cancel_outlined,
       ),
+      SessionStatus.pending => (
+        StatusColors.pending,
+        'In progress',
+        Icons.hourglass_empty,
+      ),
       SessionStatus.unknown => (
         StatusColors.unknown,
         'Unknown',
@@ -146,6 +170,36 @@ class OvertimeBadge extends StatelessWidget {
       color: StatusColors.overtime,
       icon: Icons.more_time,
       label: 'OT ${formatMinutes(minutes)}',
+    );
+  }
+}
+
+/// A part-time week's Met / In progress / Short badge.
+class WeekStatusBadge extends StatelessWidget {
+  const WeekStatusBadge({super.key, required this.status});
+  final WeekStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, label, icon) = switch (status) {
+      WeekStatus.met => (StatusColors.present, 'Met', Icons.check_circle),
+      WeekStatus.inProgress => (
+        StatusColors.pending,
+        'In progress',
+        Icons.hourglass_empty,
+      ),
+      WeekStatus.short => (StatusColors.absent, 'Short', Icons.cancel),
+      WeekStatus.unknown => (
+        StatusColors.unknown,
+        'Unknown',
+        Icons.help_outline,
+      ),
+    };
+    return _pill(
+      key: ValueKey('week-${weekStatusToApi(status)}'),
+      color: color,
+      icon: icon,
+      label: label,
     );
   }
 }

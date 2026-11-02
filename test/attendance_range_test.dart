@@ -8,6 +8,7 @@ import 'package:biometric_mobile/features/attendance/attendance_controller.dart'
 import 'package:biometric_mobile/features/attendance/attendance_repository.dart';
 import 'package:biometric_mobile/models/attendance_day.dart';
 import 'package:biometric_mobile/models/monthly_summary.dart';
+import 'package:biometric_mobile/models/weekly_hours.dart';
 
 AttendanceDay _day(String date, DayStatus status, {int ot = 0}) =>
     AttendanceDay(
@@ -32,6 +33,10 @@ class _RangeRepo implements AttendanceRepository {
         .where((d) => d.date.compareTo(s) >= 0 && d.date.compareTo(e) <= 0)
         .toList();
   }
+
+  @override
+  Future<List<WeeklyHours>> fetchWeekly({DateTime? start, DateTime? end}) async =>
+      const [];
 }
 
 class _NoopCache implements CacheStore {
@@ -196,4 +201,45 @@ void main() {
     final again = AttendanceDay.fromJson(live[1].toJson());
     expect((again.lateMinutes, again.undertimeMinutes), (15, 1));
   });
+
+  test(
+    'summary totals absent minutes too, and "Total lost" is late+undertime+absent',
+    () {
+      // Lost time now includes full/partial absences — a missed session loses
+      // its whole scheduled length (AM/PM default 240 each; a whole missed
+      // day 480).
+      final aFullyMissedDay = AttendanceDay.fromJson({
+        'date': '2026-10-30',
+        'employee_type': 'FULL_TIME',
+        'am': {
+          'in': null,
+          'out': null,
+          'status': 'ABSENT',
+          'minutes_late': 0,
+          'minutes_undertime': 0,
+          'minutes_absent': 240,
+        },
+        'pm': {
+          'in': null,
+          'out': null,
+          'status': 'ABSENT',
+          'minutes_late': 0,
+          'minutes_undertime': 0,
+          'minutes_absent': 240,
+        },
+        'overtime_minutes': 0,
+        'late_minutes': 0,
+        'undertime_minutes': 0,
+        'absent_minutes': 480,
+        'lost_minutes': 480,
+        'day_status': 'ABSENT',
+      });
+      final aLateDay = _day('2026-10-29', DayStatus.late);
+
+      final s = MonthlySummary.fromDays([aFullyMissedDay, aLateDay]);
+
+      expect(s.absentMinutes, 480);
+      expect(s.lostMinutes, s.lateMinutes + s.undertimeMinutes + 480);
+    },
+  );
 }

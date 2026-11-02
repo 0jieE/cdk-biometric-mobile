@@ -5,6 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../../models/app_notification.dart';
 import '../../models/attendance_day.dart';
 import '../../models/employee.dart';
+import '../../models/weekly_hours.dart';
 
 /// Offline cache backed by Hive. Values are stored as JSON strings (manual
 /// serialization) so no generated type adapters are required.
@@ -23,6 +24,7 @@ class CacheStore {
   static const _kProfile = 'profile';
   static const _kAttendancePrefix = 'attendance:'; // + start..end (YYYY-MM-DD)
   static const _kNotifications = 'notifications';
+  static const _kWeekly = 'weekly'; // part-time weekly hours (single slot)
   static const _kLastSyncPrefix = 'lastsync:'; // + logical key
 
   /// Open (or create) the cache box. Call once at startup.
@@ -89,6 +91,29 @@ class CacheStore {
       return null;
     }
   }
+
+  // ---- Weekly hours (part-time; single slot — "last 4 weeks ending today")
+
+  Future<void> saveWeekly(List<WeeklyHours> weeks) async {
+    final encoded = jsonEncode(weeks.map((w) => w.toJson()).toList());
+    await _box.put(_kWeekly, encoded);
+    await _touch(_kWeekly);
+  }
+
+  List<WeeklyHours>? readWeekly() {
+    final raw = _box.get(_kWeekly) as String?;
+    if (raw == null) return null;
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => WeeklyHours.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {
+      return null; // stale/incompatible cache — fail soft
+    }
+  }
+
+  DateTime? lastSyncWeekly() => lastSyncFor(_kWeekly);
 
   // ---- Last-sync timestamps ----------------------------------------------
 

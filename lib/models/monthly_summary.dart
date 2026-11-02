@@ -14,6 +14,10 @@ import 'attendance_day.dart';
 /// into "Present" ([daysPresent]) and reports lateness only as minutes. A day
 /// with one late session and one absent session is a HALF_DAY; its late minutes
 /// are still included in [lateMinutes].
+///
+/// [lostMinutes] is late + undertime + absent minutes — a missed session (or a
+/// whole missed day) loses its full scheduled length, same as the backend's
+/// `lost_minutes`.
 class MonthlySummary {
   final String month; // YYYY-MM
   final int present;
@@ -23,6 +27,7 @@ class MonthlySummary {
   final int overtimeMinutes;
   final int lateMinutes;
   final int undertimeMinutes;
+  final int absentMinutes;
 
   const MonthlySummary({
     required this.month,
@@ -33,6 +38,7 @@ class MonthlySummary {
     required this.overtimeMinutes,
     this.lateMinutes = 0,
     this.undertimeMinutes = 0,
+    this.absentMinutes = 0,
   });
 
   /// Summary of [days]; `month` is left empty (the range is the caller's).
@@ -47,6 +53,7 @@ class MonthlySummary {
       overtimeMinutes: days.fold(0, (sum, d) => sum + d.overtimeMinutes),
       lateMinutes: days.fold(0, (sum, d) => sum + d.lateMinutes),
       undertimeMinutes: days.fold(0, (sum, d) => sum + d.undertimeMinutes),
+      absentMinutes: days.fold(0, (sum, d) => sum + d.absentMinutes),
     );
   }
 
@@ -55,7 +62,7 @@ class MonthlySummary {
   /// Full days attended: on time or late. Lateness is reported in
   /// [lateMinutes], not as a separate day count.
   int get daysPresent => present + late;
-  int get lostMinutes => lateMinutes + undertimeMinutes;
+  int get lostMinutes => lateMinutes + undertimeMinutes + absentMinutes;
 
   factory MonthlySummary.fromJson(Map<String, dynamic> json) => MonthlySummary(
     month: (json['month'] ?? '') as String,
@@ -66,6 +73,7 @@ class MonthlySummary {
     overtimeMinutes: (json['overtime_minutes'] as num?)?.toInt() ?? 0,
     lateMinutes: (json['late_minutes'] as num?)?.toInt() ?? 0,
     undertimeMinutes: (json['undertime_minutes'] as num?)?.toInt() ?? 0,
+    absentMinutes: (json['absent_minutes'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> toJson() => {
@@ -77,6 +85,7 @@ class MonthlySummary {
     'overtime_minutes': overtimeMinutes,
     'late_minutes': lateMinutes,
     'undertime_minutes': undertimeMinutes,
+    'absent_minutes': absentMinutes,
   };
 
   static const empty = MonthlySummary(

@@ -50,6 +50,7 @@ class AppTheme {
   static const Color halfDay = Color(0xFFF59E0B); // half-day (amber)
   static const Color absent = Color(0xFFDC2626); // absent / missing (red)
   static const Color overtime = Color(0xFF2563EB); // overtime (blue)
+  static const Color pending = Color(0xFF0EA5E9); // in progress / today (sky)
 
   /// Soft card shadow used across the app.
   static List<BoxShadow> get softShadow => const [
@@ -175,6 +176,10 @@ class AppTheme {
         return absent;
       case 'OVERTIME':
         return overtime;
+      case 'PENDING':
+        return pending;
+      case 'INCOMPLETE':
+        return late;
       default:
         return Colors.grey;
     }

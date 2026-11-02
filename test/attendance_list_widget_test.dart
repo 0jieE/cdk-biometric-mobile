@@ -32,9 +32,18 @@ Widget _wrap(AttendanceState seeded) => ProviderScope(
 );
 
 void main() {
+  // The summary card now has two "Time" rows (uniform with "Days"), which made
+  // the single seeded day tile taller than the default ~800x600 test surface —
+  // ListView only materializes children within the viewport + cache extent, so
+  // without more headroom the tile silently isn't built and `find` can't see
+  // it. A taller surface is the fix, not scrolling (real phones are taller
+  // than the default test surface too).
+
   testWidgets('full-time card renders AM/PM rows, late chip and OT badge', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final seeded = AttendanceState(
       range: DateTimeRange(
         start: DateTime(2026, 7, 1),
@@ -112,6 +121,9 @@ void main() {
   testWidgets('part-time incomplete card shows the missing-punch warning', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final seeded = AttendanceState(
       range: DateTimeRange(
         start: DateTime(2026, 7, 1),

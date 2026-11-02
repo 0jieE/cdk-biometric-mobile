@@ -10,11 +10,16 @@ import 'package:biometric_mobile/core/storage/cache_store.dart';
 import 'package:biometric_mobile/features/attendance/attendance_controller.dart';
 import 'package:biometric_mobile/features/attendance/attendance_repository.dart';
 import 'package:biometric_mobile/models/attendance_day.dart';
+import 'package:biometric_mobile/models/weekly_hours.dart';
 
 /// Repository stub that behaves as if the backend is unreachable.
 class _OfflineAttendanceRepository implements AttendanceRepository {
   @override
   Future<List<AttendanceDay>> fetchRange(DateTime start, DateTime end) async =>
+      throw const NetworkUnavailable();
+
+  @override
+  Future<List<WeeklyHours>> fetchWeekly({DateTime? start, DateTime? end}) async =>
       throw const NetworkUnavailable();
 }
 

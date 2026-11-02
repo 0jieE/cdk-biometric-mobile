@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../core/config/api_config.dart';
 import '../../core/network/api_client.dart';
 import '../../models/attendance_day.dart';
+import '../../models/weekly_hours.dart';
 
 /// Fetches attendance history from the DRF API.
 ///
@@ -42,6 +43,31 @@ class AttendanceRepository {
         page += 1;
       }
       return days;
+    } on DioException catch (e) {
+      throw mapDioError(e);
+    }
+  }
+
+  /// Weekly worked-vs-required hours (part-time only; full-timers always get an
+  /// empty list). [start]/[end] are both optional — the backend defaults to the
+  /// last 4 weeks ending today. Not paginated (no `next`/`previous`), newest
+  /// week first.
+  Future<List<WeeklyHours>> fetchWeekly({DateTime? start, DateTime? end}) async {
+    try {
+      final res = await _dio.get(
+        ApiConfig.attendanceWeekly,
+        queryParameters: {
+          if (start != null) 'start': formatApiDate(start),
+          if (end != null) 'end': formatApiDate(end),
+        },
+      );
+      if (res.statusCode != 200 || res.data is! Map) {
+        throw ApiException(res.statusCode, 'Could not load weekly hours.');
+      }
+      final results = (res.data['results'] as List? ?? const []);
+      return results
+          .map((e) => WeeklyHours.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
     } on DioException catch (e) {
       throw mapDioError(e);
     }

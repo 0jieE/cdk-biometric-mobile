@@ -42,6 +42,7 @@ class ApiConfig {
   static const String meUsername = '/me/username/';
   static const String attendance = '/attendance/';
   static const String attendanceSummary = '/attendance/summary/';
+  static const String attendanceWeekly = '/attendance/weekly/';
   static const String notifications = '/notifications/';
   static const String deviceRegister = '/devices/register/';
 

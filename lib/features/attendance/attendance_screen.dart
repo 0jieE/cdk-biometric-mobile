@@ -7,7 +7,10 @@ import '../../core/widgets/offline_banner.dart';
 import '../../core/widgets/state_views.dart';
 import '../../models/attendance_day.dart';
 import '../../models/monthly_summary.dart';
+import '../../models/weekly_hours.dart';
+import '../auth/auth_controller.dart';
 import 'attendance_controller.dart';
+import 'weekly_controller.dart';
 import 'widgets/attendance_chips.dart';
 
 class AttendanceScreen extends ConsumerStatefulWidget {
@@ -47,6 +50,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(attendanceControllerProvider);
+    final employee = ref.watch(authControllerProvider).employee;
+    final isFulltime = employee?.isFulltime ?? true;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Attendance')),
@@ -56,9 +61,12 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           if (state.offline) OfflineBanner(lastSync: state.lastSync),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () =>
-                  ref.read(attendanceControllerProvider.notifier).refresh(),
-              child: _buildBody(state),
+              onRefresh: () => Future.wait([
+                ref.read(attendanceControllerProvider.notifier).refresh(),
+                if (!isFulltime)
+                  ref.read(weeklyControllerProvider.notifier).refresh(),
+              ]),
+              child: _buildBody(state, isFulltime: isFulltime),
             ),
           ),
         ],
@@ -66,7 +74,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     );
   }
 
-  Widget _buildBody(AttendanceState state) {
+  Widget _buildBody(AttendanceState state, {required bool isFulltime}) {
     if (state.loading && state.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -90,7 +98,13 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
-        _SummaryCard(summary: state.summary),
+        // Full-timers are judged per day/session: Days + Time card. Part-timers
+        // are judged on weekly hours (see WeeklyProgressCard) — a Days/Time card
+        // would be all zeros for them now that there's no daily pass/fail.
+        if (isFulltime)
+          _SummaryCard(summary: state.summary)
+        else
+          const WeeklyProgressCard(),
         const SizedBox(height: 20),
         Text('Daily records', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
@@ -197,6 +211,8 @@ class _SummaryCard extends StatelessWidget {
             const Divider(height: 28),
             const _SectionLabel('Time'),
             const SizedBox(height: 8),
+            // Row 1: the three components (same 3-tile layout as "Days", for
+            // visual uniformity). Row 2: the two totals derived from them.
             Row(
               children: [
                 _SummaryStat(
@@ -211,6 +227,17 @@ class _SummaryCard extends StatelessWidget {
                   color: StatusColors.halfDay,
                   icon: Icons.exit_to_app,
                 ),
+                _SummaryStat(
+                  label: 'Absence',
+                  value: formatMinutes(summary.absentMinutes),
+                  color: StatusColors.absent,
+                  icon: Icons.event_busy_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
                 _SummaryStat(
                   label: 'Total lost',
                   value: formatMinutes(summary.lostMinutes),
@@ -292,6 +319,238 @@ class _SummaryStat extends StatelessWidget {
   }
 }
 
+/// Color for a week's big "worked" number, matching [WeekStatusBadge].
+Color _weekColor(WeekStatus s) => switch (s) {
+  WeekStatus.met => StatusColors.present,
+  WeekStatus.inProgress => StatusColors.pending,
+  WeekStatus.short => StatusColors.absent,
+  WeekStatus.unknown => StatusColors.unknown,
+};
+
+/// "Sep 28 – Oct 4, 2026" for a week's raw YYYY-MM-DD start/end strings.
+String formatWeek(WeeklyHours w) {
+  final start = DateTime.tryParse(w.weekStart);
+  final end = DateTime.tryParse(w.weekEnd);
+  if (start == null || end == null) return '${w.weekStart} – ${w.weekEnd}';
+  return start.year == end.year
+      ? '${DateFormat('MMM d').format(start)} – '
+            '${DateFormat('MMM d, y').format(end)}'
+      : '${DateFormat('MMM d, y').format(start)} – '
+            '${DateFormat('MMM d, y').format(end)}';
+}
+
+String _days(int n) => n == 1 ? '1 day' : '$n days';
+
+/// "1 / 2 days" (or "3 days" when the backend didn't send `required_days`).
+String formatWeekDays(WeeklyHours w) => w.requiredDays > 0
+    ? '${w.daysWorked} / ${_days(w.requiredDays)}'
+    : _days(w.daysWorked);
+
+/// What a not-yet-met week is missing: "2h 30m", "1 day" or "2h 30m & 1 day".
+/// Null for a MET week or when nothing is reported missing. Note
+/// remaining_minutes can be 0 on a week that's still SHORT (enough hours, too
+/// few days).
+String? describeShortfall(WeeklyHours w) {
+  if (w.status == WeekStatus.met) return null;
+  final parts = [
+    if (w.remainingMinutes > 0) formatMinutes(w.remainingMinutes),
+    if (w.remainingDays > 0) _days(w.remainingDays),
+  ];
+  return parts.isEmpty ? null : parts.join(' & ');
+}
+
+/// Part-time weekly hours: "This week" progress (worked vs. required, with a
+/// progress bar) plus a short list of past weeks. Loads itself on mount;
+/// `refresh` is called alongside the attendance list's own pull-to-refresh
+/// (see [_AttendanceScreenState.build]).
+class WeeklyProgressCard extends ConsumerStatefulWidget {
+  const WeeklyProgressCard({super.key});
+
+  @override
+  ConsumerState<WeeklyProgressCard> createState() =>
+      _WeeklyProgressCardState();
+}
+
+class _WeeklyProgressCardState extends ConsumerState<WeeklyProgressCard> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(weeklyControllerProvider.notifier).load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(weeklyControllerProvider);
+    final theme = Theme.of(context);
+
+    if (state.loading && state.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
+    if (state.error != null && state.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('This week', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 10),
+              Text(state.error!, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () =>
+                    ref.read(weeklyControllerProvider.notifier).load(),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final current = state.current;
+    if (current == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No weekly hours yet — they will appear once your attendance '
+            'starts being tracked.',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    final color = _weekColor(current.status);
+    final past = state.past;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('This week', style: theme.textTheme.titleMedium),
+                if (state.offline) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.cloud_off_outlined, size: 16, color: theme.hintColor),
+                ],
+                const Spacer(),
+                WeekStatusBadge(status: current.status),
+              ],
+            ),
+            Text(
+              formatWeek(current),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  formatMinutes(current.workedMinutes),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  ' / ${formatMinutes(current.requiredMinutes)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.hintColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: current.fraction,
+                minHeight: 8,
+                color: color,
+                backgroundColor: color.withValues(alpha: 0.14),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              key: const ValueKey('week-current-detail'),
+              [
+                '${formatWeekDays(current)} worked',
+                if (describeShortfall(current) case final missing?)
+                  current.status == WeekStatus.short
+                      ? 'Short by $missing'
+                      : '$missing to go',
+              ].join(' · '),
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+            ),
+            if (past.isNotEmpty) ...[
+              const Divider(height: 28),
+              const _SectionLabel('Past weeks'),
+              const SizedBox(height: 8),
+              ...past.map((w) => _PastWeekRow(week: w)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PastWeekRow extends StatelessWidget {
+  const _PastWeekRow({required this.week});
+  final WeeklyHours week;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final missing = describeShortfall(week);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(formatWeek(week), style: theme.textTheme.bodyMedium),
+                Text(
+                  '${formatMinutes(week.workedMinutes)} / '
+                  '${formatMinutes(week.requiredMinutes)} · '
+                  '${formatWeekDays(week)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.hintColor,
+                  ),
+                ),
+                if (week.status == WeekStatus.short && missing != null)
+                  Text(
+                    'Short by $missing',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: StatusColors.absent,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          WeekStatusBadge(status: week.status),
+        ],
+      ),
+    );
+  }
+}
+
 /// Subtle color key for the status chips.
 class _Legend extends StatelessWidget {
   const _Legend();
@@ -351,7 +610,8 @@ class _AttendanceTile extends StatelessWidget {
   }
 }
 
-/// Header: date + day-status badge + optional OT badge.
+/// Header: date + day-status badge + optional OT badge, + an optional
+/// special-event note (e.g. a credited "Foundation Day (AM required)").
 class _DayHeader extends StatelessWidget {
   const _DayHeader({required this.day});
   final AttendanceDay day;
@@ -362,20 +622,57 @@ class _DayHeader extends StatelessWidget {
     final label = date != null
         ? DateFormat('EEE, MMM d').format(date)
         : day.date;
-    return Row(
+    final event = day.event;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Wrap (not a fixed Row) so the OT + status badges drop to a
+            // second line on a narrow phone instead of overflowing — both
+            // can appear together (e.g. a LATE day with overtime).
+            Expanded(
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (day.hasOvertime) OvertimeBadge(minutes: day.overtimeMinutes),
+                  DayStatusBadge(status: day.dayStatus),
+                ],
+              ),
+            ),
+          ],
         ),
-        const Spacer(),
-        if (day.hasOvertime) ...[
-          OvertimeBadge(minutes: day.overtimeMinutes),
-          const SizedBox(width: 6),
+        if (event != null) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Icon(Icons.celebration_outlined,
+                  size: 14, color: Theme.of(context).hintColor),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  event,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).hintColor,
+                      ),
+                ),
+              ),
+            ],
+          ),
         ],
-        DayStatusBadge(status: day.dayStatus),
       ],
     );
   }
@@ -420,9 +717,9 @@ class _SessionRow extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
-              _TimeCol(label: 'IN', time: s?.timeIn),
-              const SizedBox(width: 20),
-              _TimeCol(label: 'OUT', time: s?.timeOut),
+              Expanded(child: _TimeCol(label: 'IN', time: s?.timeIn)),
+              const SizedBox(width: 12),
+              Expanded(child: _TimeCol(label: 'OUT', time: s?.timeOut)),
             ],
           ),
         ),
@@ -435,7 +732,10 @@ class _SessionRow extends StatelessWidget {
   }
 }
 
-/// Part-time: single in/out row + incomplete warning when flagged.
+/// Part-time: single in/out row, hours worked, + incomplete warning when
+/// flagged. A part-timer is judged on weekly hours (see [WeeklyProgressCard]),
+/// not a daily window, so there is no "Absent" chip here any more — only
+/// Present / In progress (today) / Incomplete.
 class _ParttimeBody extends StatelessWidget {
   const _ParttimeBody({required this.day});
   final AttendanceDay day;
@@ -458,15 +758,23 @@ class _ParttimeBody extends StatelessWidget {
             ),
             if (!day.incomplete)
               SessionChip(
-                status: day.dayStatus == DayStatus.present
-                    ? SessionStatus.present
-                    : SessionStatus.absent,
+                status: day.dayStatus == DayStatus.pending
+                    ? SessionStatus.pending
+                    : SessionStatus.present,
               ),
           ],
         ),
         if (day.incomplete) ...[
           const SizedBox(height: 10),
           IncompleteChip(missing: day.missing),
+        ] else if (day.workedMinutes > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Worked ${formatMinutes(day.workedMinutes)}',
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: StatusColors.present),
+          ),
         ],
       ],
     );
@@ -489,7 +797,11 @@ class _TimeCol extends StatelessWidget {
             context,
           ).textTheme.labelSmall?.copyWith(color: Theme.of(context).hintColor),
         ),
-        Text(_fmtTime(time), style: Theme.of(context).textTheme.bodyMedium),
+        Text(
+          _fmtTime(time),
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
       ],
     );
   }
