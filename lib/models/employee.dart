@@ -2,9 +2,12 @@
 ///
 /// The backend serializer (EmployeeProfileSerializer) returns:
 /// employee_no, full_name, first_name, last_name, department,
-/// department_code, position, date_hired (nullable), is_fulltime,
+/// department_code, date_hired (nullable), is_fulltime,
 /// employment_type ("FULL_TIME" / "PART_TIME"), username (login name), photo_url (nullable absolute
 /// URL; changes with every upload, so it is a good cache key).
+///
+/// It may also send a legacy `position`; the app ignores it (the field was
+/// dropped from employee records on the web portal).
 class Employee {
   final String employeeNo;
   final String fullName;
@@ -12,7 +15,6 @@ class Employee {
   final String lastName;
   final String department;
   final String departmentCode;
-  final String position;
   final String? dateHired;
   final bool isFulltime;
   final String employmentType;
@@ -28,7 +30,6 @@ class Employee {
     required this.lastName,
     required this.department,
     required this.departmentCode,
-    required this.position,
     this.dateHired,
     this.isFulltime = true,
     this.employmentType = 'FULL_TIME',
@@ -43,7 +44,6 @@ class Employee {
     lastName: lastName,
     department: department,
     departmentCode: departmentCode,
-    position: position,
     dateHired: dateHired,
     isFulltime: isFulltime,
     employmentType: employmentType,
@@ -58,7 +58,6 @@ class Employee {
     lastName: (json['last_name'] ?? '') as String,
     department: (json['department'] ?? '') as String,
     departmentCode: (json['department_code'] ?? '') as String,
-    position: (json['position'] ?? '') as String,
     dateHired: json['date_hired'] as String?,
     isFulltime: (json['is_fulltime'] ?? true) as bool,
     employmentType: (json['employment_type'] ?? 'FULL_TIME') as String,
@@ -73,7 +72,6 @@ class Employee {
     'last_name': lastName,
     'department': department,
     'department_code': departmentCode,
-    'position': position,
     'date_hired': dateHired,
     'is_fulltime': isFulltime,
     'employment_type': employmentType,

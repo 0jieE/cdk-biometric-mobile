@@ -36,7 +36,6 @@ class ProfileScreen extends ConsumerWidget {
               children: [
                 _ProfileHeader(
                   fullName: employee.fullName,
-                  position: employee.position,
                   photoUrl: employee.photoUrl,
                 ),
                 const SizedBox(height: 24),
@@ -68,14 +67,6 @@ class ProfileScreen extends ConsumerWidget {
                         value: employee.department.isEmpty
                             ? '—'
                             : '${employee.department} (${employee.departmentCode})',
-                      ),
-                      const Divider(height: 1),
-                      _InfoRow(
-                        icon: Icons.work_outline,
-                        label: 'Position',
-                        value: employee.position.isEmpty
-                            ? '—'
-                            : employee.position,
                       ),
                       const Divider(height: 1),
                       _InfoRow(
@@ -188,11 +179,9 @@ class ProfileScreen extends ConsumerWidget {
 class _ProfileHeader extends ConsumerStatefulWidget {
   const _ProfileHeader({
     required this.fullName,
-    required this.position,
     required this.photoUrl,
   });
   final String fullName;
-  final String position;
   final String? photoUrl;
 
   @override
@@ -260,7 +249,6 @@ class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
   @override
   Widget build(BuildContext context) {
     final fullName = widget.fullName;
-    final position = widget.position;
     final initials = fullName.isEmpty
         ? '?'
         : fullName
@@ -396,13 +384,6 @@ class _ProfileHeaderState extends ConsumerState<_ProfileHeader> {
             context,
           ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
-        if (position.isNotEmpty)
-          Text(
-            position,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).hintColor,
-            ),
-          ),
       ],
     );
   }

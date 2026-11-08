@@ -69,7 +69,6 @@ void main() {
         lastName: 'B',
         department: 'HR',
         departmentCode: 'HR',
-        position: 'X',
       );
       final updated = e.copyWith(photoUrl: 'https://x/p.jpg');
       expect(updated.photoUrl, 'https://x/p.jpg');
