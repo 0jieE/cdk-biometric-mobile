@@ -1,8 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:biometric_mobile/core/network/api_client.dart';
 import 'package:biometric_mobile/core/providers.dart';
@@ -11,6 +9,8 @@ import 'package:biometric_mobile/features/attendance/attendance_controller.dart'
 import 'package:biometric_mobile/features/attendance/attendance_repository.dart';
 import 'package:biometric_mobile/models/attendance_day.dart';
 import 'package:biometric_mobile/models/weekly_hours.dart';
+
+import 'helpers.dart';
 
 /// Repository stub that behaves as if the backend is unreachable.
 class _OfflineAttendanceRepository implements AttendanceRepository {
@@ -24,22 +24,15 @@ class _OfflineAttendanceRepository implements AttendanceRepository {
 }
 
 void main() {
-  late Directory tmp;
-  late Box box;
+  late Database db;
   late CacheStore cache;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('hive_test');
-    Hive.init(tmp.path);
-    box = await Hive.openBox('test_cache');
-    cache = CacheStore(box);
+    db = await openTestDatabase();
+    cache = CacheStore(db);
   });
 
-  tearDown(() async {
-    await box.deleteFromDisk();
-    await Hive.close();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-  });
+  tearDown(() => db.close());
 
   test('attendance load falls back to cached data on network error', () async {
     final container = ProviderContainer(
@@ -52,11 +45,15 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    // Seed the cache for the range the controller defaults to.
-    final key = rangeKey(container.read(attendanceControllerProvider).range);
+    // Seed the cache for the range the controller defaults to, with two days
+    // inside it (the cache only returns days within the requested range).
+    final range = container.read(attendanceControllerProvider).range;
+    final key = rangeKey(range);
+    final first = formatApiDate(range.start);
+    final second = formatApiDate(range.start.add(const Duration(days: 1)));
     final cachedDays = [
-      const AttendanceDay(
-        date: '2026-07-01',
+      AttendanceDay(
+        date: first,
         employeeType: EmployeeType.fullTime,
         dayStatus: DayStatus.present,
         am: AttendanceSession(
@@ -73,8 +70,8 @@ void main() {
         ),
         overtimeMinutes: 30,
       ),
-      const AttendanceDay(
-        date: '2026-07-02',
+      AttendanceDay(
+        date: second,
         employeeType: EmployeeType.partTime,
         dayStatus: DayStatus.absent,
         ptIn: null,
@@ -91,13 +88,17 @@ void main() {
     final state = container.read(attendanceControllerProvider);
     expect(state.offline, isTrue, reason: 'offline banner should be flagged');
     expect(state.error, isNull);
-    expect(state.days.length, 2);
+    // Newest first, like the API.
+    expect(state.days.map((d) => d.date), [second, first]);
     // Full-time day round-trips through the cache with its AM/PM + OT.
-    expect(state.days.first.isFulltime, isTrue);
-    expect(state.days.first.overtimeMinutes, 30);
+    final fullTime = state.days[1];
+    expect(fullTime.isFulltime, isTrue);
+    expect(fullTime.overtimeMinutes, 30);
+    expect(fullTime.am?.status, SessionStatus.present);
+    expect(fullTime.pm?.status, SessionStatus.present);
     // Part-time incomplete day round-trips too.
-    expect(state.days[1].incomplete, isTrue);
-    expect(state.days[1].missing, 'OUT');
+    expect(state.days[0].incomplete, isTrue);
+    expect(state.days[0].missing, 'OUT');
     // The summary is derived from the cached days.
     expect(state.summary.present, 1);
     expect(state.summary.absent, 1);

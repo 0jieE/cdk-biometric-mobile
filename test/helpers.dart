@@ -2,8 +2,21 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:biometric_mobile/core/storage/app_database.dart';
 import 'package:biometric_mobile/core/storage/secure_token_store.dart';
+
+/// A fresh in-memory copy of the app's SQLite database (same schema as on
+/// the phone), run through sqflite's desktop FFI backend. Close it in
+/// tearDown so the next test starts empty.
+Future<Database> openTestDatabase() {
+  sqfliteFfiInit();
+  return AppDatabase.open(
+    path: inMemoryDatabasePath,
+    factory: databaseFactoryFfi,
+  );
+}
 
 /// In-memory [TokenStore] for tests.
 class InMemoryTokenStore implements TokenStore {

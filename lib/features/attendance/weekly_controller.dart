@@ -75,22 +75,22 @@ class WeeklyController extends Notifier<WeeklyState> {
         loading: false,
         offline: false,
         clearError: true,
-        lastSync: _cache.lastSyncWeekly(),
+        lastSync: await _cache.lastSyncWeekly(),
       );
     } on NetworkUnavailable {
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(
           loading: false,
           error: 'You are offline. Weekly hours will appear once you reconnect.',
         );
       }
     } on ApiException catch (e) {
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(loading: false, error: e.message);
       }
     } catch (e) {
       debugPrint('weekly hours load failed: $e');
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(
           loading: false,
           error: 'Could not load weekly hours.',
@@ -99,15 +99,16 @@ class WeeklyController extends Notifier<WeeklyState> {
     }
   }
 
-  bool _loadFromCache() {
-    final cached = _cache.readWeekly();
+  Future<bool> _loadFromCache() async {
+    final cached = await _cache.readWeekly();
     if (cached == null) return false;
+    final lastSync = await _cache.lastSyncWeekly();
     state = state.copyWith(
       weeks: cached,
       loading: false,
       offline: true,
       clearError: true,
-      lastSync: _cache.lastSyncWeekly(),
+      lastSync: lastSync,
     );
     return true;
   }

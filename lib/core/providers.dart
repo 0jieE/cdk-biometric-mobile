@@ -12,14 +12,14 @@ final secureTokenStoreProvider = Provider<TokenStore>((ref) {
   return SecureTokenStore();
 });
 
-/// Offline cache. Overridden in [main] with an already-opened Hive box.
+/// Offline cache. Overridden in [main] with the opened SQLite database.
 final cacheStoreProvider = Provider<CacheStore>((ref) {
   throw UnimplementedError(
     'cacheStoreProvider must be overridden with an opened CacheStore',
   );
 });
 
-/// App settings (theme). Overridden in [main] with an opened Hive box.
+/// App settings (theme). Overridden in [main] with the opened SQLite database.
 final settingsStoreProvider = Provider<SettingsStore>((ref) {
   throw UnimplementedError(
     'settingsStoreProvider must be overridden with an opened SettingsStore',

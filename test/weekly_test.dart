@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hive/hive.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:biometric_mobile/core/config/api_config.dart';
 import 'package:biometric_mobile/core/network/api_client.dart';
@@ -247,22 +245,15 @@ void main() {
   });
 
   group('WeeklyController', () {
-    late Directory tmp;
-    late Box box;
+    late Database db;
     late CacheStore cache;
 
     setUp(() async {
-      tmp = Directory.systemTemp.createTempSync('weekly_hive_test');
-      Hive.init(tmp.path);
-      box = await Hive.openBox('weekly_test_cache');
-      cache = CacheStore(box);
+      db = await openTestDatabase();
+      cache = CacheStore(db);
     });
 
-    tearDown(() async {
-      await box.deleteFromDisk();
-      await Hive.close();
-      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-    });
+    tearDown(() => db.close());
 
     test('load() fetches, caches, and exposes current/past', () async {
       final weeks = _liveResults.map(WeeklyHours.fromJson).toList();
@@ -281,7 +272,7 @@ void main() {
       expect(state.current?.status, WeekStatus.met);
       expect(state.past.length, 1);
       expect(state.past.single.status, WeekStatus.short);
-      expect(cache.readWeekly()?.length, 2);
+      expect((await cache.readWeekly())?.length, 2);
     });
 
     test('a network error falls back to the cache and flags offline',

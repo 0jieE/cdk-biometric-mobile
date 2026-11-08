@@ -36,6 +36,8 @@ class _Cache implements CacheStore {
   Future<void> saveNotifications(List<AppNotification> notes) async =>
       saved = notes;
   @override
+  Future<DateTime?> lastSyncNotifications() async => null;
+  @override
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 

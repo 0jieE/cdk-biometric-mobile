@@ -75,10 +75,10 @@ class NotificationsController extends Notifier<NotificationsState> {
         loading: false,
         offline: false,
         clearError: true,
-        lastSync: _cache.lastSyncNotifications(),
+        lastSync: await _cache.lastSyncNotifications(),
       );
     } on NetworkUnavailable {
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(
           loading: false,
           error:
@@ -87,12 +87,12 @@ class NotificationsController extends Notifier<NotificationsState> {
         );
       }
     } on ApiException catch (e) {
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(loading: false, error: e.message);
       }
     } catch (e) {
       debugPrint('notifications load failed: $e');
-      if (!_loadFromCache()) {
+      if (!await _loadFromCache()) {
         state = state.copyWith(
           loading: false,
           error: 'Could not load notifications.',
@@ -101,15 +101,16 @@ class NotificationsController extends Notifier<NotificationsState> {
     }
   }
 
-  bool _loadFromCache() {
-    final cached = _cache.readNotifications();
+  Future<bool> _loadFromCache() async {
+    final cached = await _cache.readNotifications();
     if (cached == null) return false;
+    final lastSync = await _cache.lastSyncNotifications();
     state = state.copyWith(
       items: cached,
       loading: false,
       offline: true,
       clearError: true,
-      lastSync: _cache.lastSyncNotifications(),
+      lastSync: lastSync,
     );
     return true;
   }

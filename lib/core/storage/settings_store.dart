@@ -1,4 +1,4 @@
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:sqflite/sqflite.dart';
 
 /// Abstraction over app-settings persistence so it can be faked in tests.
 abstract class SettingsStore {
@@ -10,31 +10,45 @@ abstract class SettingsStore {
   Future<void> saveThemeMode(String mode);
 }
 
-/// Hive-backed settings. Uses its own box, separate from the attendance/profile
-/// cache, so theme preferences survive logout (logout only clears the cache box).
-class HiveSettingsStore implements SettingsStore {
-  HiveSettingsStore(this._box);
+/// Settings in the `app_setting` table, separate from the cached API data, so
+/// theme preferences survive logout (logout only clears the cache tables).
+///
+/// All rows are loaded once in [open], so reads are synchronous — the theme is
+/// needed to draw the very first frame.
+class SqliteSettingsStore implements SettingsStore {
+  SqliteSettingsStore._(this._db, this._values);
 
-  final Box _box;
+  final Database _db;
+  final Map<String, String> _values;
 
-  static const String boxName = 'app_settings';
   static const String _kAccent = 'theme_accent';
   static const String _kThemeMode = 'theme_mode';
 
-  static Future<HiveSettingsStore> open() async {
-    final box = await Hive.openBox(boxName);
-    return HiveSettingsStore(box);
+  static Future<SqliteSettingsStore> open(Database db) async {
+    final rows = await db.query('app_setting');
+    return SqliteSettingsStore._(db, {
+      for (final r in rows) r['key'] as String: r['value'] as String,
+    });
+  }
+
+  Future<void> _save(String key, String value) async {
+    _values[key] = value;
+    await _db.insert(
+      'app_setting',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   @override
-  String? readAccent() => _box.get(_kAccent) as String?;
+  String? readAccent() => _values[_kAccent];
 
   @override
-  Future<void> saveAccent(String accentKey) => _box.put(_kAccent, accentKey);
+  Future<void> saveAccent(String accentKey) => _save(_kAccent, accentKey);
 
   @override
-  String? readThemeMode() => _box.get(_kThemeMode) as String?;
+  String? readThemeMode() => _values[_kThemeMode];
 
   @override
-  Future<void> saveThemeMode(String mode) => _box.put(_kThemeMode, mode);
+  Future<void> saveThemeMode(String mode) => _save(_kThemeMode, mode);
 }

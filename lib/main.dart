@@ -2,13 +2,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/config/api_config.dart';
 import 'core/providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
+import 'core/storage/app_database.dart';
 import 'core/storage/cache_store.dart';
 import 'core/storage/settings_store.dart';
 import 'core/theme/theme_controller.dart';
@@ -26,11 +26,11 @@ Future<void> main() async {
     return;
   }
 
-  // Offline cache + app settings (Hive). Settings live in their own box so the
-  // saved server URL survives logout (which clears only the cache box).
-  await Hive.initFlutter();
-  final cacheStore = await CacheStore.open();
-  final settingsStore = await HiveSettingsStore.open();
+  // Local SQLite database: the offline cache + app settings. Settings live in
+  // their own table so they survive logout (which clears only the cache).
+  final db = await AppDatabase.open();
+  final cacheStore = CacheStore(db);
+  final settingsStore = await SqliteSettingsStore.open(db);
 
   // Firebase / FCM is optional. If google-services.json is missing (or any
   // init error occurs) the app still runs and simply skips push registration.

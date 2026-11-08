@@ -40,7 +40,7 @@ class AuthController extends Notifier<AuthState> {
     }
 
     // Show cached profile immediately if we have one.
-    final cached = _cache.readProfile();
+    final cached = await _cache.readProfile();
     state = AuthState(status: AuthStatus.authenticated, employee: cached);
 
     // Best-effort refresh of the profile; keep the session even if offline.

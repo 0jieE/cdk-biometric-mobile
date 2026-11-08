@@ -10,6 +10,8 @@ import 'package:biometric_mobile/models/attendance_day.dart';
 import 'package:biometric_mobile/models/monthly_summary.dart';
 import 'package:biometric_mobile/models/weekly_hours.dart';
 
+import 'helpers.dart';
+
 AttendanceDay _day(String date, DayStatus status, {int ot = 0}) =>
     AttendanceDay(
       date: date,
@@ -39,14 +41,6 @@ class _RangeRepo implements AttendanceRepository {
       const [];
 }
 
-class _NoopCache implements CacheStore {
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    final name = invocation.memberName.toString();
-    if (name.contains('read') || name.contains('lastSync')) return null;
-    return Future<void>.value();
-  }
-}
 
 void main() {
   final days = [
@@ -69,9 +63,11 @@ void main() {
     'selecting a date range loads it and summarises only that range',
     () async {
       final repo = _RangeRepo(days);
+      final db = await openTestDatabase();
+      addTearDown(db.close);
       final container = ProviderContainer(
         overrides: [
-          cacheStoreProvider.overrideWithValue(_NoopCache()),
+          cacheStoreProvider.overrideWithValue(CacheStore(db)),
           attendanceRepositoryProvider.overrideWithValue(repo),
         ],
       );

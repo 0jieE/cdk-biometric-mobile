@@ -20,7 +20,7 @@ device, not the phone. Admin functions live in the web portal.
 | State management | `flutter_riverpod` (Riverpod 3, `Notifier`) |
 | HTTP + auth refresh | `dio` (interceptor auto-refreshes JWT on 401) |
 | Secure token storage | `flutter_secure_storage` |
-| Offline cache | `hive` / `hive_flutter` (manual JSON, no codegen) |
+| Offline cache | SQLite via `sqflite` (schema in `lib/core/storage/app_database.dart`) |
 | Navigation + guard | `go_router` |
 | Push | `firebase_core` + `firebase_messaging` + `flutter_local_notifications` |
 | Dates | `intl` |
@@ -152,7 +152,8 @@ shared/live server.
 
 ## Offline behaviour
 
-Every successful fetch is written to Hive, keyed by the selected date range. On a network failure
+Every successful fetch is written to the local SQLite database (`cdk_attendance.db`; one table per
+endpoint, see `app_database.dart`), and `sync_log` records when each was synced. On a network failure
 the screen loads the last-synced data from cache and shows a subtle
 **"Offline — showing saved data"** banner with the last-sync time.
 Pull-to-refresh re-fetches when back online. Logout clears tokens **and** cache.
@@ -216,12 +217,12 @@ path, then `docker compose restart web celery_worker`. Test with
 
 ```
 lib/
-  main.dart                      # bootstrap: Hive, graceful Firebase, providers,
+  main.dart                      # bootstrap: SQLite, graceful Firebase, providers,
                                   # config-error screen if .env wasn't passed
   core/
     config/     api_config.dart  # build-time base URL (from .env) + endpoints
     network/    api_client.dart, auth_interceptor.dart  # dio + 401 refresh
-    storage/    secure_token_store.dart, cache_store.dart, settings_store.dart
+    storage/    app_database.dart, cache_store.dart, settings_store.dart, secure_token_store.dart
     router/     app_router.dart  # go_router + auth guard
     theme/      app_theme.dart    # Material 3, CDK colors
     widgets/    offline_banner.dart, state_views.dart

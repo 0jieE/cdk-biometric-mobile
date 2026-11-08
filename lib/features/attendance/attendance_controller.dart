@@ -99,7 +99,7 @@ class AttendanceController extends Notifier<AttendanceState> {
   }
 
   /// Load the currently-selected range. Tries the network first; on a network
-  /// failure it falls back to the Hive cache and flags [offline]. The summary
+  /// failure it falls back to the SQLite cache and flags [offline]. The summary
   /// is derived from the loaded days.
   Future<void> load({bool showSpinner = true}) async {
     final range = state.range;
@@ -124,11 +124,11 @@ class AttendanceController extends Notifier<AttendanceState> {
         loading: false,
         offline: false,
         clearError: true,
-        lastSync: _cache.lastSyncAttendance(key),
+        lastSync: await _cache.lastSyncAttendance(key),
       );
     } on NetworkUnavailable {
       if (stale()) return;
-      if (!_loadFromCache(key)) {
+      if (!await _loadFromCache(key, stale)) {
         state = state.copyWith(
           loading: false,
           error:
@@ -139,13 +139,13 @@ class AttendanceController extends Notifier<AttendanceState> {
     } on ApiException catch (e) {
       if (stale()) return;
       // Try cache; if none, surface the error.
-      if (!_loadFromCache(key)) {
+      if (!await _loadFromCache(key, stale)) {
         state = state.copyWith(loading: false, error: e.message);
       }
     } catch (e) {
       debugPrint('attendance load failed: $e');
       if (stale()) return;
-      if (!_loadFromCache(key)) {
+      if (!await _loadFromCache(key, stale)) {
         state = state.copyWith(
           loading: false,
           error: 'Something went wrong loading attendance.',
@@ -154,9 +154,12 @@ class AttendanceController extends Notifier<AttendanceState> {
     }
   }
 
-  /// Loads cached data for [key]. Returns true if cache existed.
-  bool _loadFromCache(String key) {
-    final cachedDays = _cache.readAttendance(key);
+  /// Loads cached data for [key]. Returns true if cache existed (or the load
+  /// was superseded by a newer range, which then owns the state).
+  Future<bool> _loadFromCache(String key, bool Function() stale) async {
+    final cachedDays = await _cache.readAttendance(key);
+    final lastSync = await _cache.lastSyncAttendance(key);
+    if (stale()) return true;
     if (cachedDays == null) return false;
     state = state.copyWith(
       days: cachedDays,
@@ -164,7 +167,7 @@ class AttendanceController extends Notifier<AttendanceState> {
       loading: false,
       offline: true,
       clearError: true,
-      lastSync: _cache.lastSyncAttendance(key),
+      lastSync: lastSync,
     );
     return true;
   }
