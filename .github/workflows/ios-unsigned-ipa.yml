@@ -1,0 +1,64 @@
+# Builds an UNSIGNED iOS .ipa on a GitHub-hosted Mac, for sideloading with
+# Sideloadly / AltStore (they re-sign it with your own Apple ID on install).
+#
+# Run it from GitHub → Actions → "iOS unsigned IPA" → Run workflow, pick the
+# backend URL, and download the .ipa from the run's Artifacts when it's done.
+# Nothing here needs an Apple Developer account.
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Backend URL baked into the app (API_BASE_URL)
+        required: true
+        default: https://usage-angles-emporium.ngrok-free.dev
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.8
+          cache: true
+
+      # Same build-time config as local builds (see .env.example). Only the
+      # API URL is needed: Firebase isn't configured for iOS yet, and the app
+      # runs without push when it isn't.
+      - name: Write .env
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url }}
+        run: echo "API_BASE_URL=$API_BASE_URL" > .env
+
+      - name: Install packages
+        run: flutter pub get
+
+      # Flutter generates ios/Podfile here with the iOS platform line
+      # commented out; the Firebase pods need iOS 15+.
+      - name: Pin iOS 15 in the Podfile
+        run: |
+          if [ -f ios/Podfile ]; then
+            sed -i '' "s/^# *platform :ios.*/platform :ios, '15.0'/" ios/Podfile
+            grep -n "platform :ios" ios/Podfile || true
+          fi
+
+      - name: Build (no code signing)
+        run: flutter build ios --release --no-codesign --dart-define-from-file=.env
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry CDK-Attendance-unsigned.ipa Payload
+          ls -lh CDK-Attendance-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CDK-Attendance-ios-unsigned
+          path: CDK-Attendance-unsigned.ipa
+          retention-days: 30
